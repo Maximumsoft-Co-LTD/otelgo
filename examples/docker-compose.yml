@@ -1,0 +1,98 @@
+services:
+  http-basic:
+    build:
+      context: ..
+      dockerfile: ./examples/http-basic/Dockerfile
+    ports:
+      - "8090:8090"
+    environment:
+      - SERVICE_NAME=http-basic
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+    depends_on:
+      - otel-collector
+
+  http-gin:
+    build:
+      context: ..
+      dockerfile: ./examples/http-gin/Dockerfile
+    ports:
+      - "8091:8091"
+    environment:
+      - SERVICE_NAME=http-gin
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+    depends_on:
+      - otel-collector
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    command: [ "--config=/etc/otel-collector-config.yaml" ]
+    volumes:
+      - ./infra/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    depends_on:
+      - tempo
+
+  tempo:
+    image: grafana/tempo:latest
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./infra/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"   # http api
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  loki:
+    image: grafana/loki:latest
+    command: [ "-config.file=/etc/loki/config.yaml" ]
+    volumes:
+      - ./infra/loki-config.yaml:/etc/loki/config.yaml:ro
+    ports:
+      - "3100:3100"   # HTTP API (Grafana ใช้ connect data source)
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./infra/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./infra/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    depends_on:
+      - tempo
+      - loki
+
+  alloy:
+    image: grafana/alloy:latest
+    command: [ "run", "/etc/alloy/config.alloy" ]
+    volumes:
+      - ./infra/alloy-config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - loki
+volumes:
+  tempo-data:
+
+networks:
+  default:
+    driver: bridge

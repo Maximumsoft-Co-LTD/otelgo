@@ -1,0 +1,24 @@
+// ===========================
+// Discover containers จาก Docker
+// ===========================
+discovery.docker "local" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// ===========================
+// Loki write target
+// ===========================
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+// ===========================
+// Source: Docker containers
+// ===========================
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.docker.local.targets
+  forward_to = [loki.write.default.receiver]
+}

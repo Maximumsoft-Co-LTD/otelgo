@@ -1,0 +1,56 @@
+{
+  "id": null,
+  "uid": "otel-overview",
+  "title": "OTEL Overview (Traces & Logs)",
+  "tags": ["otel", "tempo", "loki"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Recent Traces (Tempo)",
+      "type": "traces",
+      "gridPos": { "h": 12, "w": 12, "x": 0, "y": 0 },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "options": {
+        "query": "",
+        "showSearch": true,
+        "spanBar": {
+          "type": "None"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Service Logs (Loki)",
+      "type": "logs",
+      "gridPos": { "h": 12, "w": 12, "x": 12, "y": 0 },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{container=~\"examples-.*\"}",
+          "queryType": "range"
+        }
+      ]
+    }
+  ]
+}
