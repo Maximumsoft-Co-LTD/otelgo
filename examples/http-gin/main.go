@@ -63,10 +63,18 @@ func helloGin(c *gin.Context) {
 	ctx := c.Request.Context()
 	start := time.Now()
 
+	eto.Log().
+		FromContext(ctx).
+		Info().
+		Msg("gin hello 1").
+		Field("client_ip", c.ClientIP()).
+		Send()
+
 	_ = eto.Trace().
 		Name("gin.hello").
 		FromContext(ctx).
-		Attr("custom attr", "test").
+		Attr("custom attr 1", "test1").
+		Attr("custom attr 2", "test2").
 		Run(func(ctx context.Context) error {
 			eto.MetricCounter("http_requests_total").
 				Attr("service", "example-http-gin").
@@ -77,7 +85,7 @@ func helloGin(c *gin.Context) {
 			eto.Log().
 				FromContext(ctx).
 				Info().
-				Msg("gin hello").
+				Msg("gin hello 2").
 				Field("client_ip", c.ClientIP()).
 				Send()
 

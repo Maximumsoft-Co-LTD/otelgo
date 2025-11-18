@@ -42,6 +42,9 @@ services:
       - "4318:4318"   # OTLP HTTP
     depends_on:
       - tempo
+      - loki
+      - prometheus
+      - alloy
 
   tempo:
     image: grafana/tempo:latest
@@ -81,10 +84,13 @@ services:
     depends_on:
       - tempo
       - loki
+      - alloy
 
   alloy:
     image: grafana/alloy:latest
     command: [ "run", "/etc/alloy/config.alloy" ]
+    ports:
+      - "12345:12345"
     volumes:
       - ./infra/alloy-config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock

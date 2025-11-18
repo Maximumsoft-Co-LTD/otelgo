@@ -56,11 +56,9 @@ metrics_generator:
   processor:
     service_graphs: {}
     span_metrics: {}
-    # 👇 ต้องใช้ชื่อ local_blocks (underscore) ไม่ใช่ local-blocks
     local_blocks: {}
 
 overrides:
-  # ตรงนี้เป็นแค่ list string เลยใช้ชื่อแบบที่ Grafana/เอกสารพูดถึงได้
   metrics_generator_processors:
     - service-graphs
     - span-metrics

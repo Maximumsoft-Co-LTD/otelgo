@@ -1,24 +1,28 @@
-// ===========================
-// Discover containers จาก Docker
-// ===========================
-discovery.docker "local" {
-  host = "unix:///var/run/docker.sock"
+otelcol.receiver.otlp "from_collector" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    logs = [otelcol.processor.batch.default.input]
+  }
 }
 
-// ===========================
-// Loki write target
-// ===========================
+otelcol.processor.batch "default" {
+  output {
+    logs = [otelcol.exporter.loki.default.input]
+  }
+}
+
+otelcol.exporter.loki "default" {
+  forward_to = [loki.write.default.receiver]
+}
+
 loki.write "default" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"
   }
-}
-
-// ===========================
-// Source: Docker containers
-// ===========================
-loki.source.docker "containers" {
-  host       = "unix:///var/run/docker.sock"
-  targets    = discovery.docker.local.targets
-  forward_to = [loki.write.default.receiver]
 }

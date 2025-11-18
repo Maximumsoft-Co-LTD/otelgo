@@ -1,54 +1,297 @@
 {
   "id": null,
-  "uid": "otel-overview",
-  "title": "OTEL Overview (Traces & Logs)",
-  "tags": ["otel", "tempo", "loki"],
+  "uid": "eto-http-observability",
+  "title": "ETO HTTP Observability",
+  "tags": ["eto", "otel", "http", "example"],
   "timezone": "browser",
-  "schemaVersion": 38,
+  "schemaVersion": 39,
   "version": 1,
-  "refresh": "10s",
+  "refresh": "5s",
+  "editable": true,
   "time": {
-    "from": "now-15m",
+    "from": "now-1h",
     "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m", "5m"]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "service",
+        "label": "service",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "$DS_PROMETHEUS"
+        },
+        "query": "label_values(http_requests_total, service)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "route",
+        "label": "route",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "$DS_PROMETHEUS"
+        },
+        "query": "label_values(http_requests_total{service=~\"$service\"}, route)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "method",
+        "label": "method",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "$DS_PROMETHEUS"
+        },
+        "query": "label_values(http_requests_total{service=~\"$service\"}, method)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "type": "dashboard",
+        "name": "Annotations & Alerts",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(255, 96, 96, 1)",
+        "builtIn": 1
+      }
+    ]
   },
   "panels": [
     {
-      "id": 1,
-      "title": "Recent Traces (Tempo)",
-      "type": "traces",
-      "gridPos": { "h": 12, "w": 12, "x": 0, "y": 0 },
-      "datasource": {
-        "type": "tempo",
-        "uid": "tempo"
-      },
-      "options": {
-        "query": "",
-        "showSearch": true,
-        "spanBar": {
-          "type": "None"
-        }
-      }
+      "type": "row",
+      "title": "Overview",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1
     },
     {
       "id": 2,
-      "title": "Service Logs (Loki)",
-      "type": "logs",
-      "gridPos": { "h": 12, "w": 12, "x": 12, "y": 0 },
+      "type": "timeseries",
+      "title": "HTTP RPS (requests per second)",
+      "description": "sum(rate(http_requests_total)) per service",
       "datasource": {
-        "type": "loki",
-        "uid": "loki"
+        "type": "prometheus",
+        "uid": "$DS_PROMETHEUS"
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "req/s",
+          "min": 0
+        },
+        "overrides": []
       },
       "options": {
-        "showTime": true,
-        "showLabels": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "{container=~\"examples-.*\"}",
-          "queryType": "range"
+          "expr": "sum by (service) (rate(http_requests_total{service=~\"$service\", route=~\"$route\", method=~\"$method\"}[$__rate_interval]))",
+          "legendFormat": "{{service}}",
+          "interval": ""
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "HTTP Requests by Route",
+      "description": "RPS grouped by route",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DS_PROMETHEUS"
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "req/s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (service, route) (rate(http_requests_total{service=~\"$service\", route=~\"$route\", method=~\"$method\"}[$__rate_interval]))",
+          "legendFormat": "{{service}} {{route}}",
+          "interval": ""
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Average Latency (ms)",
+      "description": "sum(rate(sum))/sum(rate(count))",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DS_PROMETHEUS"
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (service, route) (rate(http_request_duration_ms_milliseconds_sum{service=~\"$service\", route=~\"$route\", method=~\"$method\"}[$__rate_interval]))\n/\nsum by (service, route) (rate(http_request_duration_ms_milliseconds_count{service=~\"$service\", route=~\"$route\", method=~\"$method\"}[$__rate_interval]))",
+          "legendFormat": "{{service}} {{route}}",
+          "interval": ""
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "p95 Latency (ms)",
+      "description": "histogram_quantile(0.95, rate(bucket))",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DS_PROMETHEUS"
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(\n  0.95,\n  sum by (le) (\n    rate(http_request_duration_ms_milliseconds_bucket{service=~\"$service\", route=~\"$route\", method=~\"$method\"}[$__rate_interval])\n  )\n)",
+          "legendFormat": "p95 latency",
+          "interval": ""
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "heatmap",
+      "title": "Latency Histogram (ms)",
+      "description": "bucket distribution over time",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DS_PROMETHEUS"
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 17 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "show": true
+        },
+        "yAxis": {
+          "format": "ms"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (le) (rate(http_request_duration_ms_milliseconds_bucket{service=~\"$service\", route=~\"$route\", method=~\"$method\"}[$__rate_interval]))",
+          "legendFormat": "{{le}}",
+          "interval": ""
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Total HTTP Requests (current range)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DS_PROMETHEUS"
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 25 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "req",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["last"],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(http_requests_total{service=~\"$service\", route=~\"$route\", method=~\"$method\"}[$__range]))",
+          "legendFormat": "total",
+          "interval": ""
         }
       ]
     }

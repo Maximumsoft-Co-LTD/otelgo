@@ -12,6 +12,11 @@ exporters:
     tls:
       insecure: true    # ใช้ gRPC plaintext
 
+  otlphttp/alloy:
+    endpoint: http://alloy:4318
+    tls:
+       insecure: true
+
   prometheus:
     endpoint: "0.0.0.0:8889"
 
@@ -32,3 +37,8 @@ service:
       receivers: [ otlp ]
       processors: [ batch ]
       exporters: [ prometheus, debug ]
+
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/alloy, debug]
