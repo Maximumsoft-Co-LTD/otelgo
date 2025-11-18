@@ -21,7 +21,28 @@ type TraceBuilder struct {
 	tracerName string
 }
 
-// Trace เริ่ม Fluent builder
+type SpanScope struct {
+	ctx  context.Context
+	span trace.Span
+}
+
+func (s *SpanScope) Ctx() context.Context {
+	if s == nil || s.ctx == nil {
+		return context.Background()
+	}
+	return s.ctx
+}
+
+func (s *SpanScope) Span() trace.Span {
+	return s.span
+}
+
+func (s *SpanScope) Done() {
+	if s != nil && s.span != nil {
+		s.span.End()
+	}
+}
+
 func Trace() *TraceBuilder {
 	return &TraceBuilder{
 		ctx:        context.Background(),
@@ -89,7 +110,6 @@ func (b *TraceBuilder) SetStatusOnError(enable bool) *TraceBuilder {
 	return b
 }
 
-// Start ใช้ถ้าต้องการ control span เอง
 func (b *TraceBuilder) Start() (context.Context, trace.Span) {
 	if b.name == "" {
 		b.name = "unnamed-span"
@@ -102,7 +122,14 @@ func (b *TraceBuilder) Start() (context.Context, trace.Span) {
 	return ctx, span
 }
 
-// Run สะดวกสุด: ครอบ fn ด้วย span
+func (b *TraceBuilder) StartScope() *SpanScope {
+	ctx, span := b.Start()
+	return &SpanScope{
+		ctx:  ctx,
+		span: span,
+	}
+}
+
 func (b *TraceBuilder) Run(fn func(ctx context.Context) error) error {
 	if fn == nil {
 		return errors.New("eto.Trace().Run: fn is nil")
