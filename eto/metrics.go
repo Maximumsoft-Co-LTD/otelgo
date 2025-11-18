@@ -16,10 +16,6 @@ var (
 	histogramCache = map[string]metric.Float64Histogram{}
 )
 
-/* ===========================
-   Counter (Int64Counter)
-   =========================== */
-
 type CounterBuilder struct {
 	name  string
 	attrs []attribute.KeyValue
@@ -27,7 +23,6 @@ type CounterBuilder struct {
 	desc  string
 }
 
-// MetricCounter สร้าง Fluent builder สำหรับ Counter
 func MetricCounter(name string) *CounterBuilder {
 	return &CounterBuilder{
 		name: name,
@@ -57,9 +52,8 @@ func (b *CounterBuilder) Description(desc string) *CounterBuilder {
 	return b
 }
 
-// Add บวกค่า counter
 func (b *CounterBuilder) Add(ctx context.Context, value int64) {
-	if globalMeter == nil {
+	if !globalCfg.EnableMetrics || globalMeter == nil {
 		return
 	}
 
@@ -93,10 +87,6 @@ func getOrCreateCounter(name, unit, desc string) metric.Int64Counter {
 	return c
 }
 
-/* ===========================
-   Histogram (Float64Histogram)
-   =========================== */
-
 type HistogramBuilder struct {
 	name  string
 	attrs []attribute.KeyValue
@@ -104,11 +94,10 @@ type HistogramBuilder struct {
 	desc  string
 }
 
-// MetricHistogram สร้าง Fluent builder สำหรับ Histogram
 func MetricHistogram(name string) *HistogramBuilder {
 	return &HistogramBuilder{
 		name: name,
-		unit: "ms", // default เป็น milliseconds (เช่น latency)
+		unit: "ms",
 	}
 }
 
@@ -134,9 +123,8 @@ func (b *HistogramBuilder) Description(desc string) *HistogramBuilder {
 	return b
 }
 
-// Record บันทึกค่า histogram (float64)
 func (b *HistogramBuilder) Record(ctx context.Context, value float64) {
-	if globalMeter == nil {
+	if !globalCfg.EnableMetrics || globalMeter == nil {
 		return
 	}
 
@@ -167,10 +155,6 @@ func getOrCreateHistogram(name, unit, desc string) metric.Float64Histogram {
 	histogramCache[name] = h
 	return h
 }
-
-/* ===========================
-   Helper: any → attribute
-   =========================== */
 
 func anyToAttr(key string, val any) attribute.KeyValue {
 	switch v := val.(type) {

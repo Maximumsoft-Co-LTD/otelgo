@@ -4,54 +4,82 @@
 - Collector แยกเอา:
 - Traces → Jaeger / Tempo
 - Metrics → Prometheus → Grafana
-- Logs → sLog / Loki (หรือส่งต่อไป Alloy / Agent ก่อนก็ได้)
-- ส่วน Zap เป็น logger ใน app → พ่น JSON ลง stdout แล้วให้ Alloy/Promtail ดึงเข้า Loki อีกที
+- Logs → zap → alloy → Loki
 ```mermaid
 flowchart LR
+    %% =========================
+    %% Applications
+    %% =========================
     subgraph Apps["Applications"]
         A1["APP #1"]
         A2["APP #2"]
         A3["APP #3"]
     end
 
+    %% =========================
+    %% SDK / Library ใน App
+    %% =========================
     subgraph SDK["OTel SDK + eto"]
-        B(("Tracing-Metrics-Logs"))
+        B(("Tracing / Metrics / Logs"))
     end
 
+    %% =========================
+    %% OTel Collector
+    %% =========================
     subgraph Collector["OTel Collector"]
-        COL{{"Collector"}}
+        COL{{"Collector\n(OTLP Receiver)"}}
     end
 
-    subgraph Tracing["Tracing Backends"]
-        C1["Jaeger"]
-        C2["Tempo"]
+    %% =========================
+    %% Observability Backends
+    %% =========================
+    subgraph Tracing["Tracing Backend"]
+        T1["Tempo"]
     end
 
     subgraph Metrics["Metrics Backend"]
         M1["Prometheus"]
-        M2["Grafana (Dashboards)"]
     end
 
-    subgraph Logging["Logging Backends"]
-        L1["sLog (custom sink)"]
+    subgraph Logging["Logging Backend"]
+        subgraph Alloy["Grafana Alloy"]
+            AL{{"OTLP → Loki"}}
+        end
         L2["Loki"]
-        L3["Zap JSON → stdout"]
     end
 
+    subgraph GrafanaUI["Grafana"]
+        G1["Dashboards / Explore\n(Traces + Metrics + Logs)"]
+    end
+
+    %% Stdout debug logs นอก OTLP flow
+    subgraph Stdout["App Local Logs"]
+        Z1["Zap JSON → stdout\n(docker logs / k8s logs)"]
+    end
+
+    %% =========================
+    %% Edges
+    %% =========================
     A1 --> B
     A2 --> B
     A3 --> B
 
-    B --> COL
+    %% App ส่ง OTLP (Traces / Metrics / Logs) เข้า Collector
+    B -->|"OTLP: Traces / Metrics / Logs"| COL
 
-    COL -->|"Traces"| C1
-    COL -->|"Traces"| C2
+    %% Traces
+    COL -->|"Traces"| T1
+    T1 -->|"Tempo datasource"| G1
 
+    %% Metrics
     COL -->|"Metrics"| M1
-    M1 --> M2
+    M1 -->|"Prometheus datasource"| G1
 
-    COL -->|"Logs"| L1
-    COL -->|"Logs"| L2
+    %% Logs ผ่าน Alloy → Loki
+    COL -->|"Logs (OTLP)"| AL
+    AL  -->|"Loki push API"| L2
+    L2  -->|"Loki datasource"| G1
 
-    B -->|"App Logs (Zap JSON stdout)"| L3
+    %% Stdout logs (ไม่ผ่าน OTLP)
+    B -->|"Zap logger"| Z1
 ```

@@ -118,15 +118,15 @@ func (p *PropagationBuilder) FromGRPCMetadata(ctx context.Context, md metadata.M
 	return globalPropagator.Extract(ctx, carrier)
 }
 
-func (p *PropagationBuilder) ToGRPCMetadata(ctx context.Context, md *metadata.MD) {
-	if globalPropagator == nil {
+func (p *PropagationBuilder) ToGRPCMetadata(md *metadata.MD) {
+	if globalPropagator == nil || md == nil {
 		return
 	}
-	if md == nil {
+	if *md == nil {
 		*md = metadata.MD{}
 	}
 	carrier := metadataCarrier{*md}
-	globalPropagator.Inject(ctx, carrier)
+	globalPropagator.Inject(p.ctx, carrier)
 }
 
 // ---------- AMQP (RabbitMQ) ----------

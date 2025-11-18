@@ -3,8 +3,10 @@ package eto
 import (
 	"context"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type LogLevel int
@@ -23,7 +25,6 @@ type LogBuilder struct {
 	fields []zap.Field
 }
 
-// Log เริ่ม Fluent logger
 func Log() *LogBuilder {
 	return &LogBuilder{
 		ctx:   context.Background(),
@@ -38,25 +39,10 @@ func (b *LogBuilder) FromContext(ctx context.Context) *LogBuilder {
 	return b
 }
 
-func (b *LogBuilder) Debug() *LogBuilder {
-	b.level = levelDebug
-	return b
-}
-
-func (b *LogBuilder) Info() *LogBuilder {
-	b.level = levelInfo
-	return b
-}
-
-func (b *LogBuilder) Warn() *LogBuilder {
-	b.level = levelWarn
-	return b
-}
-
-func (b *LogBuilder) Error() *LogBuilder {
-	b.level = levelError
-	return b
-}
+func (b *LogBuilder) Debug() *LogBuilder { b.level = levelDebug; return b }
+func (b *LogBuilder) Info() *LogBuilder  { b.level = levelInfo; return b }
+func (b *LogBuilder) Warn() *LogBuilder  { b.level = levelWarn; return b }
+func (b *LogBuilder) Error() *LogBuilder { b.level = levelError; return b }
 
 func (b *LogBuilder) Msg(msg string) *LogBuilder {
 	b.msg = msg
@@ -86,35 +72,94 @@ func (b *LogBuilder) Fields(fields ...zap.Field) *LogBuilder {
 	return b
 }
 
+func (b *LogBuilder) otelSeverity() otellog.Severity {
+	switch b.level {
+	case levelDebug:
+		return otellog.SeverityDebug
+	case levelInfo:
+		return otellog.SeverityInfo
+	case levelWarn:
+		return otellog.SeverityWarn
+	case levelError:
+		return otellog.SeverityError
+	default:
+		return otellog.SeverityInfo
+	}
+}
+
 func (b *LogBuilder) Send() {
+	ctx := b.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	msg := b.msg
+	if msg == "" {
+		msg = "no-message"
+	}
+
+	span := trace.SpanFromContext(ctx)
+	sc := span.SpanContext()
+
+	if globalOtelLogger != nil {
+		var rec otellog.Record
+
+		rec.SetSeverity(b.otelSeverity())
+		rec.SetBody(otellog.StringValue(msg))
+
+		for _, a := range zapFieldsToOtelAttrs(b.fields) {
+			rec.AddAttributes(a)
+		}
+
+		if sc.IsValid() {
+			rec.AddAttributes(
+				otellog.String("trace_id", sc.TraceID().String()),
+				otellog.String("span_id", sc.SpanID().String()),
+			)
+		}
+
+		globalOtelLogger.Emit(ctx, rec)
+	}
+
 	if globalLogger == nil {
 		return
 	}
 
-	// ผูก trace_id/span_id จาก ctx
-	span := trace.SpanFromContext(b.ctx)
-	if span != nil {
-		sc := span.SpanContext()
-		if sc.IsValid() {
-			b.fields = append(b.fields,
-				zap.String("trace_id", sc.TraceID().String()),
-				zap.String("span_id", sc.SpanID().String()),
-			)
-		}
-	}
-
-	if b.msg == "" {
-		b.msg = "no-message"
+	if sc.IsValid() {
+		b.fields = append(b.fields,
+			zap.String("trace_id", sc.TraceID().String()),
+			zap.String("span_id", sc.SpanID().String()),
+		)
 	}
 
 	switch b.level {
 	case levelDebug:
-		globalLogger.Debug(b.msg, b.fields...)
+		globalLogger.Debug(msg, b.fields...)
 	case levelInfo:
-		globalLogger.Info(b.msg, b.fields...)
+		globalLogger.Info(msg, b.fields...)
 	case levelWarn:
-		globalLogger.Warn(b.msg, b.fields...)
+		globalLogger.Warn(msg, b.fields...)
 	case levelError:
-		globalLogger.Error(b.msg, b.fields...)
+		globalLogger.Error(msg, b.fields...)
 	}
+}
+
+func zapFieldsToOtelAttrs(fields []zap.Field) []otellog.KeyValue {
+	attrs := make([]otellog.KeyValue, 0, len(fields))
+
+	for _, f := range fields {
+		switch f.Type {
+		case zapcore.StringType:
+			attrs = append(attrs, otellog.String(f.Key, f.String))
+		case zapcore.BoolType:
+			attrs = append(attrs, otellog.Bool(f.Key, f.Integer == 1))
+		case zapcore.Int64Type, zapcore.Int32Type, zapcore.Int16Type, zapcore.Int8Type,
+			zapcore.Uint64Type, zapcore.Uint32Type, zapcore.Uint16Type, zapcore.Uint8Type:
+			attrs = append(attrs, otellog.Int64(f.Key, f.Integer))
+		default:
+			// fallback เป็น string
+			attrs = append(attrs, otellog.String(f.Key, f.String))
+		}
+	}
+
+	return attrs
 }
