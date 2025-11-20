@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	otellog "go.opentelemetry.io/otel/log"
@@ -106,16 +107,66 @@ func (b *LogBuilder) severityText() string {
 	}
 }
 
-func logCaller(skip int) string {
-	pc, file, line, ok := runtime.Caller(skip)
-	if !ok {
+func logCaller() string {
+	const (
+		maxDepth   = 32
+		skipFrames = 3
+	)
+
+	pcs := make([]uintptr, maxDepth)
+	n := runtime.Callers(skipFrames, pcs)
+	if n == 0 {
 		return ""
 	}
-	fn := runtime.FuncForPC(pc)
-	if fn != nil {
-		return fmt.Sprintf("%s:%d %s", filepath.Base(file), line, fn.Name())
+
+	frames := runtime.CallersFrames(pcs[:n])
+
+	for {
+		frame, more := frames.Next()
+
+		if useFrame(frame) {
+			file := filepath.Base(frame.File)
+			funcName := shortFuncName(frame.Function)
+			return fmt.Sprintf("%s:%d %s", file, frame.Line, funcName)
+		}
+
+		if !more {
+			break
+		}
 	}
-	return fmt.Sprintf("%s:%d", filepath.Base(file), line)
+
+	return ""
+}
+
+func useFrame(frame runtime.Frame) bool {
+	if frame.File == "" && frame.Function == "" {
+		return false
+	}
+
+	for _, p := range globalCfg.SkipCallerPkgs {
+		if p != "" && strings.HasPrefix(frame.Function, p) {
+			return false
+		}
+	}
+
+	for _, f := range globalCfg.SkipCallerFiles {
+		if f != "" && strings.Contains(frame.File, f) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func shortFuncName(fn string) string {
+	if fn == "" {
+		return ""
+	}
+
+	if idx := strings.LastIndex(fn, "/"); idx >= 0 && idx < len(fn)-1 {
+		fn = fn[idx+1:]
+	}
+	return fn
 }
 
 func (b *LogBuilder) Send() {
@@ -128,45 +179,22 @@ func (b *LogBuilder) Send() {
 		msg = "no-message"
 	}
 
-	now := time.Now().UTC()
-	levelText := b.severityText()
-	caller := logCaller(2)
-
 	span := trace.SpanFromContext(ctx)
 	sc := span.SpanContext()
 
-	b.fields = append(b.fields,
-		zap.String("level", levelText),
-		zap.Time("ts", now),
-	)
-	if caller != "" {
-		b.fields = append(b.fields, zap.String("caller", caller))
-	}
-	if sc.IsValid() {
-		b.fields = append(b.fields,
-			zap.String("trace_id", sc.TraceID().String()),
-			zap.String("span_id", sc.SpanID().String()),
-		)
-	}
-
+	// ====== OTEL Logs ======
 	if globalOtelLogger != nil {
 		var rec otellog.Record
 
 		rec.SetSeverity(b.otelSeverity())
-		rec.SetSeverityText(levelText)
-
+		rec.SetSeverityText(b.severityText())
 		rec.SetBody(otellog.StringValue(msg))
 
 		for _, a := range zapFieldsToOtelAttrs(b.fields) {
 			rec.AddAttributes(a)
 		}
 
-		rec.AddAttributes(
-			otellog.String("level", levelText),
-		)
-		if caller != "" {
-			rec.AddAttributes(otellog.String("caller", caller))
-		}
+		// trace/span id
 		if sc.IsValid() {
 			rec.AddAttributes(
 				otellog.String("trace_id", sc.TraceID().String()),
@@ -174,18 +202,32 @@ func (b *LogBuilder) Send() {
 			)
 		}
 
+		// caller
+		if caller := logCaller(); caller != "" {
+			rec.AddAttributes(otellog.String("caller", caller))
+		}
+
+		now := time.Now().UTC()
 		rec.SetTimestamp(now)
 		rec.SetObservedTimestamp(now)
-
-		rec.AddAttributes(
-			otellog.Int64("ts_unix_nano", now.UnixNano()),
-		)
 
 		globalOtelLogger.Emit(ctx, rec)
 	}
 
+	// ====== Zap logger ======
 	if globalLogger == nil {
 		return
+	}
+
+	if sc.IsValid() {
+		b.fields = append(b.fields,
+			zap.String("trace_id", sc.TraceID().String()),
+			zap.String("span_id", sc.SpanID().String()),
+		)
+	}
+
+	if caller := logCaller(); caller != "" {
+		b.fields = append(b.fields, zap.String("caller", caller))
 	}
 
 	switch b.level {
