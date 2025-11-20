@@ -7,18 +7,22 @@ import (
 	"time"
 
 	"github.com/Maximumsoft-Co-LTD/otelgo/eto"
+	"github.com/Maximumsoft-Co-LTD/otelgo/logger"
+	"github.com/Maximumsoft-Co-LTD/otelgo/metricer"
+	"github.com/Maximumsoft-Co-LTD/otelgo/tracer"
 	"github.com/gin-gonic/gin"
-	"go.opentelemetry.io/otel/trace"
 )
 
 func main() {
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	shutdown, err := eto.Init(ctx, eto.Config{
-		ServiceName:  "example-http-gin",
-		Environment:  "dev",
-		OtelEndpoint: "otel-collector:4317",
+		ServiceName:   "example-http-gin",
+		Environment:   "dev",
+		OtelEndpoint:  "0.0.0.0:4317",
+		EnableMetrics: true,
 	})
 	if err != nil {
 		log.Fatalf("eto init error: %v", err)
@@ -40,14 +44,11 @@ func otelGinMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := eto.Propagate().FromHTTPRequest(c.Request)
 
-		ctx, span := eto.Trace().
-			Name(c.FullPath()).
-			FromContext(ctx).
-			Kind(trace.SpanKindServer).
-			Attr("http.method", c.Request.Method).
-			Attr("http.route", c.FullPath()).
-			Start()
-		defer span.End()
+		ctx, end := tracer.Start(ctx, c.FullPath(),
+			"http.method", c.Request.Method,
+			"http.route", c.FullPath(),
+		)
+		defer end()
 
 		c.Request = c.Request.WithContext(ctx)
 
@@ -63,41 +64,32 @@ func helloGin(c *gin.Context) {
 	ctx := c.Request.Context()
 	start := time.Now()
 
-	eto.Log().
-		FromContext(ctx).
-		Info().
-		Msg("gin hello 1").
-		Field("client_ip", c.ClientIP()).
-		Send()
+	logger.Info(ctx, "gin hello 1", "client_ip", c.ClientIP(), "method", c.Request.Method)
+	metricer.Counter(ctx, "http_requests_total", 1,
+		"service", "example-http-gin",
+		"route", "/hello",
+		"method", c.Request.Method,
+	)
 
-	_ = eto.Trace().
-		Name("gin.hello").
-		FromContext(ctx).
-		Attr("custom attr 1", "test1").
-		Attr("custom attr 2", "test2").
-		Run(func(ctx context.Context) error {
-			eto.MetricCounter("http_requests_total").
-				Attr("service", "example-http-gin").
-				Attr("route", "/hello").
-				Attr("method", c.Request.Method).
-				Add(ctx, 1)
+	tracer.Run(ctx, "gin.hello",
 
-			eto.Log().
-				FromContext(ctx).
-				Info().
-				Msg("gin hello 2").
-				Field("client_ip", c.ClientIP()).
-				Send()
+		func(ctx context.Context) error {
+			logger.Info(ctx, "gin hello 2",
+				"status", 200,
+			)
 
 			c.JSON(http.StatusOK, gin.H{"message": "hello from http-gin example"})
 
 			latencyMs := float64(time.Since(start).Milliseconds())
-			eto.MetricHistogram("http_request_duration_ms").
-				Attr("service", "example-http-gin").
-				Attr("route", "/hello").
-				Attr("method", c.Request.Method).
-				Record(ctx, latencyMs)
-
+			metricer.Histogram(ctx, "http_request_duration_ms", latencyMs,
+				"service", "example-http-gin",
+				"route", "/hello",
+				"method", c.Request.Method,
+			)
 			return nil
-		})
+		},
+		"custom attr 1", "test1",
+		"custom attr 2", "test2",
+	)
+
 }
