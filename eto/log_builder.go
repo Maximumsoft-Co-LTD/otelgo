@@ -2,6 +2,10 @@ package eto
 
 import (
 	"context"
+	"fmt"
+	"path/filepath"
+	"runtime"
+	"time"
 
 	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/trace"
@@ -87,6 +91,33 @@ func (b *LogBuilder) otelSeverity() otellog.Severity {
 	}
 }
 
+func (b *LogBuilder) severityText() string {
+	switch b.level {
+	case levelDebug:
+		return "DEBUG"
+	case levelInfo:
+		return "INFO"
+	case levelWarn:
+		return "WARN"
+	case levelError:
+		return "ERROR"
+	default:
+		return "INFO"
+	}
+}
+
+func logCaller(skip int) string {
+	pc, file, line, ok := runtime.Caller(skip)
+	if !ok {
+		return ""
+	}
+	fn := runtime.FuncForPC(pc)
+	if fn != nil {
+		return fmt.Sprintf("%s:%d %s", filepath.Base(file), line, fn.Name())
+	}
+	return fmt.Sprintf("%s:%d", filepath.Base(file), line)
+}
+
 func (b *LogBuilder) Send() {
 	ctx := b.ctx
 	if ctx == nil {
@@ -97,19 +128,45 @@ func (b *LogBuilder) Send() {
 		msg = "no-message"
 	}
 
+	now := time.Now().UTC()
+	levelText := b.severityText()
+	caller := logCaller(2)
+
 	span := trace.SpanFromContext(ctx)
 	sc := span.SpanContext()
+
+	b.fields = append(b.fields,
+		zap.String("level", levelText),
+		zap.Time("ts", now),
+	)
+	if caller != "" {
+		b.fields = append(b.fields, zap.String("caller", caller))
+	}
+	if sc.IsValid() {
+		b.fields = append(b.fields,
+			zap.String("trace_id", sc.TraceID().String()),
+			zap.String("span_id", sc.SpanID().String()),
+		)
+	}
 
 	if globalOtelLogger != nil {
 		var rec otellog.Record
 
 		rec.SetSeverity(b.otelSeverity())
+		rec.SetSeverityText(levelText)
+
 		rec.SetBody(otellog.StringValue(msg))
 
 		for _, a := range zapFieldsToOtelAttrs(b.fields) {
 			rec.AddAttributes(a)
 		}
 
+		rec.AddAttributes(
+			otellog.String("level", levelText),
+		)
+		if caller != "" {
+			rec.AddAttributes(otellog.String("caller", caller))
+		}
 		if sc.IsValid() {
 			rec.AddAttributes(
 				otellog.String("trace_id", sc.TraceID().String()),
@@ -117,18 +174,18 @@ func (b *LogBuilder) Send() {
 			)
 		}
 
+		rec.SetTimestamp(now)
+		rec.SetObservedTimestamp(now)
+
+		rec.AddAttributes(
+			otellog.Int64("ts_unix_nano", now.UnixNano()),
+		)
+
 		globalOtelLogger.Emit(ctx, rec)
 	}
 
 	if globalLogger == nil {
 		return
-	}
-
-	if sc.IsValid() {
-		b.fields = append(b.fields,
-			zap.String("trace_id", sc.TraceID().String()),
-			zap.String("span_id", sc.SpanID().String()),
-		)
 	}
 
 	switch b.level {
@@ -155,9 +212,12 @@ func zapFieldsToOtelAttrs(fields []zap.Field) []otellog.KeyValue {
 		case zapcore.Int64Type, zapcore.Int32Type, zapcore.Int16Type, zapcore.Int8Type,
 			zapcore.Uint64Type, zapcore.Uint32Type, zapcore.Uint16Type, zapcore.Uint8Type:
 			attrs = append(attrs, otellog.Int64(f.Key, f.Integer))
+		case zapcore.TimeType:
+			attrs = append(attrs, otellog.Int64(f.Key, f.Integer))
 		default:
-			// fallback เป็น string
-			attrs = append(attrs, otellog.String(f.Key, f.String))
+			if f.String != "" {
+				attrs = append(attrs, otellog.String(f.Key, f.String))
+			}
 		}
 	}
 
