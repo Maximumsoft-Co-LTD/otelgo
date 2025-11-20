@@ -65,6 +65,7 @@ func helloGin(c *gin.Context) {
 	start := time.Now()
 
 	logger.Info(ctx, "gin hello 1", "client_ip", c.ClientIP(), "method", c.Request.Method)
+
 	metricer.Counter(ctx, "http_requests_total", 1,
 		"service", "example-http-gin",
 		"route", "/hello",
@@ -72,7 +73,6 @@ func helloGin(c *gin.Context) {
 	)
 
 	tracer.Run(ctx, "gin.hello",
-
 		func(ctx context.Context) error {
 			logger.Info(ctx, "gin hello 2",
 				"status", 200,
