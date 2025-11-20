@@ -85,6 +85,8 @@ flowchart LR
     B -->|"Zap logger"| Z1
 ```
 
+ตัวอย่าง: [code example](https://github.com/Maximumsoft-Co-LTD/otelgo/tree/main/examples), [usecase example](https://github.com/Maximumsoft-Co-LTD/otel-example-service)
+
 #### ติดตั้ง
 ```console
 go get github.com/Maximumsoft-Co-LTD/otelgo
