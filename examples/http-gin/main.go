@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"math/rand"
 	"net/http"
 	"time"
 
@@ -92,4 +93,13 @@ func helloGin(c *gin.Context) {
 		"custom attr 2", "test2",
 	)
 
+	process1(ctx)
+}
+
+func process1(ctx context.Context) {
+	ctx, end := tracer.Start(ctx, "process1")
+	defer end()
+
+	ran := rand.Intn(100)
+	time.Sleep(time.Duration(ran) * time.Millisecond)
 }

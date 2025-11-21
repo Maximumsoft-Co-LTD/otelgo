@@ -36,19 +36,7 @@ func Start(ctx context.Context, name string, attrs ...any) (context.Context, fun
 }
 
 // Run executes a function within a span, automatically handling errors.
-// Usage:
-//
-//	err := trace.Run(ctx, "operation-name", func(ctx context.Context) error {
-//	    // your code here
-//	    return nil
-//	})
-//
-// Or with attributes:
-//
-//	err := trace.Run(ctx, "operation-name", func(ctx context.Context) error {
-//	    // your code here
-//	    return nil
-//	}, "key1", "value1", "key2", 123)
+
 func Run(ctx context.Context, name string, fn func(ctx context.Context) error, attrs ...any) error {
 	builder := eto.Trace().
 		Name(name).
