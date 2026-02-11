@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/Maximumsoft-Co-LTD/otelgo/eto"
-	"github.com/Maximumsoft-Co-LTD/otelgo/logger"
-	"github.com/Maximumsoft-Co-LTD/otelgo/metricer"
-	"github.com/Maximumsoft-Co-LTD/otelgo/tracer"
+	"github.com/Maximumsoft-Co-LTD/otelgo/public/logger"
+	"github.com/Maximumsoft-Co-LTD/otelgo/public/metricer"
+	"github.com/Maximumsoft-Co-LTD/otelgo/public/tracer"
 	"github.com/gin-gonic/gin"
 )
 
