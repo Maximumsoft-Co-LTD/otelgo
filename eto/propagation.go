@@ -38,19 +38,21 @@ func (p *PropagationBuilder) WithLegacyHeaders(enable bool) *PropagationBuilder 
 // ---------- HTTP Inbound ----------
 
 func (p *PropagationBuilder) FromHTTPRequest(r *http.Request) context.Context {
-	if globalPropagator == nil {
+	propagator := propagatorSnapshot()
+	if propagator == nil {
 		return r.Context()
 	}
-	return globalPropagator.Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+	return propagator.Extract(r.Context(), propagation.HeaderCarrier(r.Header))
 }
 
 // ---------- HTTP Outbound ----------
 
 func (p *PropagationBuilder) ToHTTPRequest(r *http.Request) {
-	if globalPropagator == nil {
+	propagator := propagatorSnapshot()
+	if propagator == nil {
 		return
 	}
-	globalPropagator.Inject(p.ctx, propagation.HeaderCarrier(r.Header))
+	propagator.Inject(p.ctx, propagation.HeaderCarrier(r.Header))
 
 	if !p.useLegacy {
 		return
@@ -111,22 +113,24 @@ func (c metadataCarrier) Keys() []string {
 }
 
 func (p *PropagationBuilder) FromGRPCMetadata(ctx context.Context, md metadata.MD) context.Context {
-	if globalPropagator == nil {
+	propagator := propagatorSnapshot()
+	if propagator == nil {
 		return ctx
 	}
 	carrier := metadataCarrier{md}
-	return globalPropagator.Extract(ctx, carrier)
+	return propagator.Extract(ctx, carrier)
 }
 
 func (p *PropagationBuilder) ToGRPCMetadata(md *metadata.MD) {
-	if globalPropagator == nil || md == nil {
+	propagator := propagatorSnapshot()
+	if propagator == nil || md == nil {
 		return
 	}
 	if *md == nil {
 		*md = metadata.MD{}
 	}
 	carrier := metadataCarrier{*md}
-	globalPropagator.Inject(p.ctx, carrier)
+	propagator.Inject(p.ctx, carrier)
 }
 
 // ---------- AMQP (RabbitMQ) ----------
@@ -158,21 +162,23 @@ func (c amqpHeaderCarrier) Keys() []string {
 // FromAMQP: ดึง trace context จาก headers ของ AMQP message
 // ใช้แบบ: ctx := eto.Propagate().FromContext(baseCtx).FromAMQP(msg.Headers)
 func (p *PropagationBuilder) FromAMQP(headers amqp.Table) context.Context {
-	if globalPropagator == nil {
+	propagator := propagatorSnapshot()
+	if propagator == nil {
 		return p.ctx
 	}
 	carrier := amqpHeaderCarrier(headers)
-	return globalPropagator.Extract(p.ctx, carrier)
+	return propagator.Extract(p.ctx, carrier)
 }
 
 // ToAMQP: inject trace context ลง headers เวลาจะ publish
 // ใช้แบบ: eto.Propagate().FromContext(ctx).WithLegacyHeaders(true).ToAMQP(headers)
 func (p *PropagationBuilder) ToAMQP(headers amqp.Table) {
-	if globalPropagator == nil {
+	propagator := propagatorSnapshot()
+	if propagator == nil {
 		return
 	}
 	carrier := amqpHeaderCarrier(headers)
-	globalPropagator.Inject(p.ctx, carrier)
+	propagator.Inject(p.ctx, carrier)
 
 	if !p.useLegacy {
 		return

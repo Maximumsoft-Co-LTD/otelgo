@@ -53,11 +53,13 @@ func (b *CounterBuilder) Description(desc string) *CounterBuilder {
 }
 
 func (b *CounterBuilder) Add(ctx context.Context, value int64) {
+	runtimeMu.RLock()
+	defer runtimeMu.RUnlock()
 	if !globalCfg.EnableMetrics || globalMeter == nil {
 		return
 	}
 
-	counter := getOrCreateCounter(b.name, b.unit, b.desc)
+	counter := getOrCreateCounter(globalMeter, b.name, b.unit, b.desc)
 	if counter == nil {
 		// สร้าง instrument ไม่ได้ → ไม่ต้องทำอะไร
 		return
@@ -66,7 +68,7 @@ func (b *CounterBuilder) Add(ctx context.Context, value int64) {
 	counter.Add(ctx, value, metric.WithAttributes(b.attrs...))
 }
 
-func getOrCreateCounter(name, unit, desc string) metric.Int64Counter {
+func getOrCreateCounter(meter metric.Meter, name, unit, desc string) metric.Int64Counter {
 	counterMu.Lock()
 	defer counterMu.Unlock()
 
@@ -74,7 +76,7 @@ func getOrCreateCounter(name, unit, desc string) metric.Int64Counter {
 		return c
 	}
 
-	c, err := globalMeter.Int64Counter(
+	c, err := meter.Int64Counter(
 		name,
 		metric.WithUnit(unit),
 		metric.WithDescription(desc),
@@ -124,11 +126,13 @@ func (b *HistogramBuilder) Description(desc string) *HistogramBuilder {
 }
 
 func (b *HistogramBuilder) Record(ctx context.Context, value float64) {
+	runtimeMu.RLock()
+	defer runtimeMu.RUnlock()
 	if !globalCfg.EnableMetrics || globalMeter == nil {
 		return
 	}
 
-	h := getOrCreateHistogram(b.name, b.unit, b.desc)
+	h := getOrCreateHistogram(globalMeter, b.name, b.unit, b.desc)
 	if h == nil {
 		return
 	}
@@ -136,7 +140,7 @@ func (b *HistogramBuilder) Record(ctx context.Context, value float64) {
 	h.Record(ctx, value, metric.WithAttributes(b.attrs...))
 }
 
-func getOrCreateHistogram(name, unit, desc string) metric.Float64Histogram {
+func getOrCreateHistogram(meter metric.Meter, name, unit, desc string) metric.Float64Histogram {
 	histogramMu.Lock()
 	defer histogramMu.Unlock()
 
@@ -144,7 +148,7 @@ func getOrCreateHistogram(name, unit, desc string) metric.Float64Histogram {
 		return h
 	}
 
-	h, err := globalMeter.Float64Histogram(
+	h, err := meter.Float64Histogram(
 		name,
 		metric.WithUnit(unit),
 		metric.WithDescription(desc),
@@ -154,6 +158,15 @@ func getOrCreateHistogram(name, unit, desc string) metric.Float64Histogram {
 	}
 	histogramCache[name] = h
 	return h
+}
+
+func resetMetricCaches() {
+	counterMu.Lock()
+	counterCache = map[string]metric.Int64Counter{}
+	counterMu.Unlock()
+	histogramMu.Lock()
+	histogramCache = map[string]metric.Float64Histogram{}
+	histogramMu.Unlock()
 }
 
 func anyToAttr(key string, val any) attribute.KeyValue {
