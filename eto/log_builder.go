@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -188,7 +189,7 @@ func (b *LogBuilder) Send() {
 
 		rec.SetSeverity(b.otelSeverity())
 		rec.SetSeverityText(b.severityText())
-		rec.SetBody(otellog.StringValue(msg))
+		rec.SetBody(attribute.StringValue(msg))
 
 		for _, a := range zapFieldsToOtelAttrs(b.fields) {
 			rec.AddAttributes(a)
@@ -197,14 +198,14 @@ func (b *LogBuilder) Send() {
 		// trace/span id
 		if sc.IsValid() {
 			rec.AddAttributes(
-				otellog.String("trace_id", sc.TraceID().String()),
-				otellog.String("span_id", sc.SpanID().String()),
+				attribute.String("trace_id", sc.TraceID().String()),
+				attribute.String("span_id", sc.SpanID().String()),
 			)
 		}
 
 		// caller
 		if caller := logCaller(); caller != "" {
-			rec.AddAttributes(otellog.String("caller", caller))
+			rec.AddAttributes(attribute.String("caller", caller))
 		}
 
 		now := time.Now().UTC()
@@ -242,23 +243,23 @@ func (b *LogBuilder) Send() {
 	}
 }
 
-func zapFieldsToOtelAttrs(fields []zap.Field) []otellog.KeyValue {
-	attrs := make([]otellog.KeyValue, 0, len(fields))
+func zapFieldsToOtelAttrs(fields []zap.Field) []attribute.KeyValue {
+	attrs := make([]attribute.KeyValue, 0, len(fields))
 
 	for _, f := range fields {
 		switch f.Type {
 		case zapcore.StringType:
-			attrs = append(attrs, otellog.String(f.Key, f.String))
+			attrs = append(attrs, attribute.String(f.Key, f.String))
 		case zapcore.BoolType:
-			attrs = append(attrs, otellog.Bool(f.Key, f.Integer == 1))
+			attrs = append(attrs, attribute.Bool(f.Key, f.Integer == 1))
 		case zapcore.Int64Type, zapcore.Int32Type, zapcore.Int16Type, zapcore.Int8Type,
 			zapcore.Uint64Type, zapcore.Uint32Type, zapcore.Uint16Type, zapcore.Uint8Type:
-			attrs = append(attrs, otellog.Int64(f.Key, f.Integer))
+			attrs = append(attrs, attribute.Int64(f.Key, f.Integer))
 		case zapcore.TimeType:
-			attrs = append(attrs, otellog.Int64(f.Key, f.Integer))
+			attrs = append(attrs, attribute.Int64(f.Key, f.Integer))
 		default:
 			if f.String != "" {
-				attrs = append(attrs, otellog.String(f.Key, f.String))
+				attrs = append(attrs, attribute.String(f.Key, f.String))
 			}
 		}
 	}
